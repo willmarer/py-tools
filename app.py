@@ -166,7 +166,7 @@ class TranslatorGUI:
         for file in pptx_files:
             self.enqueue_log(f"  [PPTX] {file.name}")
         for file in ppt_files:
-            self.enqueue_log(f"  [PPT ] {file.name} (V1 暂不支持处理，仅扫描提示)")
+            self.enqueue_log(f"  [PPT ] {file.name}")
 
         self.stats_var.set(f"扫描结果：pptx={len(pptx_files)}，ppt={len(ppt_files)}")
 
@@ -228,7 +228,7 @@ class TranslatorGUI:
 
         msg = (
             f"找到 .pptx 文件 {len(pptx_files)} 个\n"
-            f"找到 .ppt 文件 {len(ppt_files)} 个（V1 暂不支持处理）\n\n"
+            f"找到 .ppt 文件 {len(ppt_files)} 个\n\n"
             f"是否开始？"
         )
         if not messagebox.askyesno("确认", msg):
