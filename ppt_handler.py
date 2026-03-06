@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from pptx import Presentation
 
@@ -82,15 +81,18 @@ class PPTProcessor:
     def _translate_shape(self, shape):
         translated_count = 0
 
+        # 文本框
         if hasattr(shape, "text_frame"):
             translated_count += self._translate_text_frame(shape.text_frame)
 
+        # 表格
         if getattr(shape, "has_table", False):
             table = shape.table
             for row in table.rows:
                 for cell in row.cells:
                     translated_count += self._translate_text_frame(cell.text_frame)
 
+        # 组合图形
         if getattr(shape, "shape_type", None) == 6 and hasattr(shape, "shapes"):
             for sub_shape in shape.shapes:
                 translated_count += self._translate_shape(sub_shape)
@@ -109,9 +111,11 @@ class PPTProcessor:
             if not full_text or not full_text.strip():
                 continue
 
-            translated = self.translator.translate(full_text)
+            # 把换行先转空格，便于短语匹配
+            normalized_text = full_text.replace("\r", " ").replace("\n", " ")
+            translated = self.translator.translate(normalized_text)
 
-            if translated != full_text:
+            if translated != normalized_text:
                 paragraph.clear()
                 paragraph.add_run().text = translated
                 translated_count += 1
