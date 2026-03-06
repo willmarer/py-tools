@@ -18,3 +18,6 @@ pip install -r requirements.txt
 ## 打包exe
 ```bash
 pyinstaller --noconsole --onefile --add-data "phrases.json;." --add-data "lexicon.json;." app.py
+
+pyinstaller --noconsole --onefile --name ppt_translator --add-data "phrases.json;." --add-data "lexicon.json;." app.py
+

@@ -113,12 +113,18 @@ class TranslatorGUI:
         try:
             self.translator = OfflineTranslator()
             self.processor = PPTProcessor(self.translator, self.enqueue_log)
+
+            info = self.translator.get_status_info()
+
             self.status_var.set("状态：翻译引擎已就绪")
-            self.enqueue_log(f"[INFO] lexicon file: {self.translator.lexicon_path}")
-            self.enqueue_log(f"[INFO] 短语数: {len(self.translator.phrases)}")
-            self.enqueue_log(f"[INFO] phrases file: {self.translator.phrases_path}")
             self.enqueue_log("[INFO] 翻译引擎加载成功")
-            self.enqueue_log(f"[INFO] 单词数: {len(self.translator.lexicon)}")
+            self.enqueue_log(f"[INFO] phrases file: {info['phrases_path']}")
+            self.enqueue_log(f"[INFO] lexicon file: {info['lexicon_path']}")
+            self.enqueue_log(f"[INFO] 短语数: {info['phrases_count']}")
+            self.enqueue_log(f"[INFO] 单词数: {info['lexicon_count']}")
+            self.enqueue_log(f"[INFO] Argos 可用: {info['argos_available']}")
+            self.enqueue_log(f"[INFO] Argos 模型已安装: {info['argos_installed']}")
+
         except Exception as e:
             self.status_var.set("状态：翻译引擎加载失败")
             self.enqueue_log(f"[ERROR] 加载翻译引擎失败: {e}")

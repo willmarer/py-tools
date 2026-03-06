@@ -1,3 +1,4 @@
 python-pptx
 pyinstaller
 pywin32
+argostranslate

@@ -4,6 +4,13 @@ import re
 import sys
 import shutil
 
+try:
+    import argostranslate.package
+    import argostranslate.translate
+    ARGOS_AVAILABLE = True
+except ImportError:
+    ARGOS_AVAILABLE = False
+
 
 def get_app_dir():
     if getattr(sys, "frozen", False):
@@ -30,6 +37,16 @@ class OfflineTranslator:
 
         self.normalized_phrases = self._build_normalized_phrases(self.phrases)
         self.max_phrase_len = self._calc_max_phrase_length()
+
+        self.argos_available = ARGOS_AVAILABLE
+        self.argos_installed = False
+        self.argos_translator = None
+        self.argos_from_code = "en"
+        self.argos_to_code = "zh"
+
+        self._init_argos_if_available()
+        self.ensure_argos_model_from_release()
+        self._init_argos_if_available()
 
     def _ensure_external_file(self, filename):
         external_path = os.path.join(self.app_dir, filename)
@@ -83,6 +100,59 @@ class OfflineTranslator:
                 max_len = word_count
         return max_len
 
+    def _init_argos_if_available(self):
+        if not self.argos_available:
+            return
+
+        try:
+            installed_languages = argostranslate.translate.get_installed_languages()
+
+            from_lang = next(
+                (lang for lang in installed_languages if lang.code == self.argos_from_code),
+                None
+            )
+            to_lang = next(
+                (lang for lang in installed_languages if lang.code == self.argos_to_code),
+                None
+            )
+
+            if from_lang and to_lang:
+                translator = from_lang.get_translation(to_lang)
+                if translator:
+                    self.argos_translator = translator
+                    self.argos_installed = True
+                    return
+
+            self.argos_installed = False
+            self.argos_translator = None
+
+        except Exception:
+            self.argos_installed = False
+            self.argos_translator = None
+
+    def ensure_argos_model_from_release(self):
+        """
+        如果 exe 同目录下 models/ 有 .argosmodel，且当前未安装模型，则自动安装。
+        """
+        if not self.argos_available:
+            return
+
+        if self.argos_installed:
+            return
+
+        model_dir = os.path.join(self.app_dir, "models")
+        if not os.path.isdir(model_dir):
+            return
+
+        for filename in os.listdir(model_dir):
+            if filename.lower().endswith(".argosmodel"):
+                model_path = os.path.join(model_dir, filename)
+                try:
+                    argostranslate.package.install_from_path(model_path)
+                    break
+                except Exception:
+                    pass
+
     def translate(self, text):
         if not text or not text.strip():
             return text
@@ -117,7 +187,6 @@ class OfflineTranslator:
 
             matched = False
 
-            # 1. 先做多 token 短语匹配（最长优先）
             for length in range(min(self.max_phrase_len, len(tokens) - i), 1, -1):
                 phrase_match = self._try_match_phrase(tokens, i, length)
                 if phrase_match is not None:
@@ -131,32 +200,51 @@ class OfflineTranslator:
 
             norm = token["norm"]
 
-            # 2. 再查普通单词表
             if norm in self.lexicon:
                 result.append(self.lexicon[norm])
                 i += 1
                 continue
 
-            # 3. 如果是带连接符的单 token，再尝试拆分后按短语/单词翻译
             split_translation = self._translate_compound_token(token["text"])
             if split_translation is not None:
                 result.append(split_translation)
                 i += 1
                 continue
 
-            # 4. 都没命中，保留原文
+            argos_result = self._translate_with_argos(token["text"])
+            if argos_result is not None and argos_result.strip():
+                result.append(argos_result)
+                i += 1
+                continue
+
             result.append(token["text"])
             i += 1
 
         return "".join(result)
 
+    def _translate_with_argos(self, text):
+        if not self.argos_installed or self.argos_translator is None:
+            return None
+
+        if re.fullmatch(r"\d+(?:\.\d+)?", text):
+            return text
+
+        if len(text.strip()) <= 1:
+            return text
+
+        if re.fullmatch(r"[A-Z0-9]{2,8}", text):
+            return text
+
+        try:
+            translated = self.argos_translator.translate(text)
+            if translated and translated.strip():
+                return translated
+        except Exception:
+            return None
+
+        return None
+
     def _translate_compound_token(self, token_text):
-        """
-        处理单个 token 内部带连接符的情况，例如：
-        market_analysis
-        market-analysis
-        market/analysis
-        """
         if not re.search(r"[_\-/]", token_text):
             return None
 
@@ -164,11 +252,9 @@ class OfflineTranslator:
         if not normalized:
             return None
 
-        # 先当短语查
         if normalized in self.normalized_phrases:
             return self.normalized_phrases[normalized]
 
-        # 再拆成单词逐个查
         parts = normalized.split()
         translated_parts = []
 
@@ -176,7 +262,8 @@ class OfflineTranslator:
             if p in self.lexicon:
                 translated_parts.append(self.lexicon[p])
             else:
-                translated_parts.append(p)
+                argos_part = self._translate_with_argos(p)
+                translated_parts.append(argos_part if argos_part else p)
 
         return "".join(translated_parts)
 
@@ -277,3 +364,15 @@ class OfflineTranslator:
         text = re.sub(r"\s+([)\]}])", r"\1", text)
 
         return text.strip()
+
+    def get_status_info(self):
+        return {
+            "phrases_path": self.phrases_path,
+            "lexicon_path": self.lexicon_path,
+            "phrases_count": len(self.phrases),
+            "lexicon_count": len(self.lexicon),
+            "argos_available": self.argos_available,
+            "argos_installed": self.argos_installed,
+            "argos_from_code": self.argos_from_code,
+            "argos_to_code": self.argos_to_code,
+        }
