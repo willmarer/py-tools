@@ -6,22 +6,12 @@ import shutil
 
 
 def get_app_dir():
-    """
-    获取程序实际运行目录：
-    - 开发环境：脚本所在目录
-    - 打包后：exe 所在目录
-    """
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
 
 def get_bundle_dir():
-    """
-    获取程序内置资源目录：
-    - 开发环境：脚本所在目录
-    - PyInstaller 打包后：临时解压目录 _MEIPASS
-    """
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
@@ -41,10 +31,6 @@ class OfflineTranslator:
         self.max_phrase_len = self._calc_max_phrase_length()
 
     def _ensure_external_file(self, filename):
-        """
-        优先使用程序目录下的外部配置文件。
-        如果不存在，则从内置资源复制一份到程序目录。
-        """
         external_path = os.path.join(self.app_dir, filename)
         bundled_path = os.path.join(self.bundle_dir, filename)
 
@@ -64,7 +50,10 @@ class OfflineTranslator:
         if not isinstance(data, dict):
             raise ValueError(f"词典文件格式错误，必须是 JSON object: {file_path}")
 
-        return data
+        normalized = {}
+        for k, v in data.items():
+            normalized[k.strip().lower()] = str(v).strip()
+        return normalized
 
     def _calc_max_phrase_length(self):
         max_len = 1
@@ -76,9 +65,6 @@ class OfflineTranslator:
 
     def translate(self, text):
         if not text or not text.strip():
-            return text
-
-        if self._contains_chinese(text):
             return text
 
         protected_map, protected_text = self._protect_special_tokens(text)
@@ -137,10 +123,17 @@ class OfflineTranslator:
 
         for p in parts:
             if re.fullmatch(r"[A-Za-z0-9_\-+/\.]+", p):
-                norm = p.lower()
-                tokens.append({"type": "word", "text": p, "norm": norm})
+                tokens.append({
+                    "type": "word",
+                    "text": p,
+                    "norm": p.lower()
+                })
             else:
-                tokens.append({"type": "sep", "text": p, "norm": p})
+                tokens.append({
+                    "type": "sep",
+                    "text": p,
+                    "norm": p
+                })
 
         return tokens
 
@@ -154,8 +147,8 @@ class OfflineTranslator:
 
         protected_map = {}
         protected_text = text
-
         counter = 0
+
         for pattern in patterns:
             matches = re.findall(pattern, protected_text)
             for m in matches:
@@ -174,7 +167,17 @@ class OfflineTranslator:
 
     def _cleanup_spaces(self, text):
         text = re.sub(r"\s+", " ", text)
+
+        # 删除中文之间的空格
+        text = re.sub(r"([\u4e00-\u9fff])\s+([\u4e00-\u9fff])", r"\1\2", text)
+
+        # 删除中文与中文标点之间的空格
+        text = re.sub(r"([\u4e00-\u9fff])\s+([，。；：！？、】【（）])", r"\1\2", text)
+        text = re.sub(r"([，。；：！？、】【（）])\s+([\u4e00-\u9fff])", r"\1\2", text)
+
+        # 删除英文标点前多余空格
         text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+
         return text.strip()
 
     def _contains_chinese(self, text):

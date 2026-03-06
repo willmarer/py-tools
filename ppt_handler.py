@@ -104,15 +104,16 @@ class PPTProcessor:
             return translated_count
 
         for paragraph in text_frame.paragraphs:
-            for run in paragraph.runs:
-                original = run.text
-                if not original or not original.strip():
-                    continue
+            full_text = "".join(run.text for run in paragraph.runs)
 
-                translated = self.translator.translate(original)
+            if not full_text or not full_text.strip():
+                continue
 
-                if translated != original:
-                    run.text = translated
-                    translated_count += 1
+            translated = self.translator.translate(full_text)
+
+            if translated != full_text:
+                paragraph.clear()
+                paragraph.add_run().text = translated
+                translated_count += 1
 
         return translated_count
